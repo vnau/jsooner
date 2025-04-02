@@ -19,7 +19,7 @@ jobs:
       - run: npm run build
       # - run: npm test
       - name: Upload dist folder
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
@@ -35,7 +35,7 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - run: npm ci
       - name: Download dist folder
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist/
