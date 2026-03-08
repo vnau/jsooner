@@ -6,7 +6,7 @@ class StreamToAsyncIterable<T> {
 
     constructor(readableStream: ReadableStream<Uint8Array>, config?: JsonParserConfig) {
         this.parserStream = new JsonParserStream<T>(config);
-        this.stream = readableStream.pipeThrough(new TextDecoderStream())
+        this.stream = readableStream.pipeThrough(new TextDecoderStream() as ReadableWritablePair<string, Uint8Array>)
             .pipeThrough(this.parserStream);
     }
 

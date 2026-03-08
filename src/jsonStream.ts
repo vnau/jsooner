@@ -8,6 +8,6 @@ export function toJsonStream<T>(source: ReadableStream<Uint8Array> | Response, c
     }
 
     return stream
-        .pipeThrough(new TextDecoderStream())
+        .pipeThrough(new TextDecoderStream() as ReadableWritablePair<string, Uint8Array>)
         .pipeThrough(new JsonParserStream<T>(config));
 };
