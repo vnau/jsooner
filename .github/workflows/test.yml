@@ -27,7 +27,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm build --if-present
+        run: pnpm build
 
       # Only run the coverage once
       - if: ${{ matrix.node-version == '24.x' }}
