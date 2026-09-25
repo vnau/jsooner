@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/jsooner?color=brightgreen&logo=npm)](https://www.npmjs.com/package/jsooner)
 ![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/vnau/7353726794cee33914eb47e39e6694c6/raw/jsooner__heads_main.json)
-[![bundle size](https://img.shields.io/bundlephobia/minzip/jsooner)](https://bundlephobia.com/package/jsooner)
+[![bundle size](https://badgen.net/bundlephobia/min/jsooner)](https://bundlephobia.com/package/jsooner)
 
 `jsooner` is a lightweight, efficient library for parsing large JSON streams.
 
