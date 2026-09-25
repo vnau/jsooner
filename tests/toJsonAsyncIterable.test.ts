@@ -60,16 +60,51 @@ describe('toJsonAsyncIterable', () => {
         expect(() => toJsonAsyncIterable(new Response(null))).toThrowError('No readable stream found.');
     });
 
-    it('should release the reader lock when the loop exits early', async () => {
-        const iterable = toJsonAsyncIterable(stringToStream('[{"a":1},{"b":2},{"c":3}]'));
-        for await (const _ of iterable) break;
-        expect((iterable as any).stream.locked).toBe(false);
+    it('should release the source when the loop exits early', async () => {
+        const source = stringToStream('[{"a":1},{"b":2},{"c":3}]');
+        for await (const _ of toJsonAsyncIterable(source)) break;
+        expect(source.locked).toBe(false);
     });
 
-    it('should release the reader lock when the stream errors', async () => {
-        const iterable = toJsonAsyncIterable(stringToStream('[{"a":1,}]'));
-        await expect(collect(iterable)).rejects.toThrow('JSON parse error');
-        expect((iterable as any).stream.locked).toBe(false);
+    it('should release the source when the stream errors', async () => {
+        const source = stringToStream('[{"a":1,}]');
+        await expect(collect(toJsonAsyncIterable(source))).rejects.toThrow('JSON parse error');
+        expect(source.locked).toBe(false);
+    });
+
+    it('should release the source when it is read to the end', async () => {
+        const source = stringToStream('{"a":1}{"b":2}');
+        expect(await collect(toJsonAsyncIterable(source))).toEqual([{ a: 1 }, { b: 2 }]);
+        expect(source.locked).toBe(false);
+    });
+
+    it('should deliver the items before the closing bracket and release the source', async () => {
+        let cancelled = false;
+        const source = new ReadableStream<Uint8Array>({
+            start(controller) { controller.enqueue(new TextEncoder().encode('[{"a":1},{"b":2}]{"c":3}')); },
+            cancel() { cancelled = true; },
+        });
+        expect(await collect(toJsonAsyncIterable(source))).toEqual([{ a: 1 }, { b: 2 }]);
+        expect(cancelled).toBe(true);
+        expect(source.locked).toBe(false);
+    });
+
+    it('should reject when the source stream errors', async () => {
+        const source = new ReadableStream<Uint8Array>({
+            start(controller) {
+                controller.enqueue(new TextEncoder().encode('{"a":1}'));
+                controller.error(new Error('network down'));
+            },
+        });
+        await expect(collect(toJsonAsyncIterable(source))).rejects.toThrow('network down');
+        expect(source.locked).toBe(false);
+    });
+
+    it('should decode a multi-byte character left incomplete at the end of the stream', async () => {
+        // the last byte of "é" is missing: TextDecoder replaces the incomplete sequence, as TextDecoderStream did
+        const bytes = new TextEncoder().encode('{"a":"x"}{"b":"é"}').slice(0, -3);
+        const source = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(bytes); c.close(); } });
+        expect(await collect(toJsonAsyncIterable(source))).toEqual([{ a: 'x' }]);
     });
 
     describe('cancelling the source', () => {
@@ -119,6 +154,22 @@ describe('toJsonAsyncIterable', () => {
             });
             await expect(collect(toJsonAsyncIterable(source))).rejects.toThrow('JSON parse error');
             await waitFor(() => cancelled);
+        });
+
+        it('should not fail when return() is called after the iterator is exhausted', async () => {
+            const iterator = toJsonAsyncIterable(stringToStream('{"a":1}', 100))[Symbol.asyncIterator]();
+            expect(await iterator.next()).toEqual({ value: { a: 1 }, done: false });
+            expect(await iterator.next()).toEqual({ value: undefined, done: true });
+            expect(await iterator.return!()).toEqual({ value: undefined, done: true });
+        });
+
+        it('should not throw into the loop when the source fails to cancel', async () => {
+            const source = new ReadableStream<Uint8Array>({
+                pull(controller) { controller.enqueue(new TextEncoder().encode('{"a":1},')); },
+                cancel() { throw new Error('cancel failed'); },
+            });
+            for await (const _ of toJsonAsyncIterable(source)) break;
+            expect(source.locked).toBe(false);
         });
 
         it('should not cancel the source when the stream is read to the end', async () => {
@@ -261,7 +312,7 @@ describe('toJsonAsyncIterable', () => {
         // Iterate through and collect all items
         for await (const item of iterable) { }
 
-        const stat = (iterable as any).parserStream.getStat();
+        const stat = (iterable as any).core.getStat();
 
         // Ensure the buffer is small
         expect(stat.maxBufferLength).toBeLessThan(25);
@@ -279,7 +330,7 @@ describe('toJsonAsyncIterable', () => {
         var count = 0;
         for await (const item of iterable) { count++; }
 
-        const stat = (iterable as any).parserStream.getStat();
+        const stat = (iterable as any).core.getStat();
 
         expect(count).toEqual(1);
 

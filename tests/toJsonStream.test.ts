@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toJsonStream } from '../src';
+import { toJsonAsyncIterable, toJsonStream } from '../src';
 import { createMockResponse, stringToStream, waitFor } from './utils';
 
 describe('toJsonStream', () => {
@@ -94,6 +94,20 @@ describe('toJsonStream', () => {
     }
 
     expect(result).toEqual([{ key1: 'value1' }]);
+  });
+
+  it('should not touch the global Response for a plain stream', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Response')!;
+    let reads = 0;
+    Object.defineProperty(globalThis, 'Response', { configurable: true, get() { reads++; return descriptor.value ?? descriptor.get?.call(globalThis); } });
+    try {
+      const reader = toJsonStream(stringToStream('{"a":1}', 100)).getReader();
+      expect((await reader.read()).value).toEqual({ a: 1 });
+      for await (const _ of toJsonAsyncIterable(stringToStream('{"a":1}', 100)));
+    } finally {
+      Object.defineProperty(globalThis, 'Response', descriptor);
+    }
+    expect(reads).toBe(0);
   });
 
   it('should pass cancel() through to the source', async () => {

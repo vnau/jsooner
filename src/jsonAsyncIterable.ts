@@ -1,43 +1,59 @@
-import { JsonParserConfig, JsonParserStat, JsonParserStream } from "./JsonDecoder.js";
+import { JsonParserConfig } from "./JsonDecoder.js";
+import { BatchReader, sourceStream } from "./batchReader.js";
 
-class StreamToAsyncIterable<T> {
-    private stream: ReadableStream<T>;
-    private parserStream: JsonParserStream<T>;
+// Hands out the items of the current batch with already-resolved promises and asks the
+// core for the next batch only when it runs out. A plain iterator object instead of an
+// async generator, so there is no extra per-item await.
+class JsonAsyncIterator<T> implements AsyncIterator<T, undefined> {
+    private batch: T[] = [];
+    private index = 0;
 
-    constructor(readableStream: ReadableStream<Uint8Array>, config?: JsonParserConfig) {
-        this.parserStream = new JsonParserStream<T>(config);
-        this.stream = readableStream.pipeThrough(new TextDecoderStream() as ReadableWritablePair<string, Uint8Array>)
-            .pipeThrough(this.parserStream);
+    constructor(private core: BatchReader<T>) { }
+
+    next(): Promise<IteratorResult<T, undefined>> {
+        if (this.index < this.batch.length)
+            return Promise.resolve({ value: this.take(), done: false });
+
+        return this.core.next().then(batch => {
+            if (batch === null)
+                return { value: undefined, done: true };
+            this.batch = batch;
+            this.index = 0;
+            return { value: this.take(), done: false };
+        });
+    }
+
+    // Clears the slot as the item is handed out, so items the consumer has finished with don't stay
+    // reachable through the batch; otherwise they survive scavenges and V8 grows its young generation
+    private take(): T {
+        const value = this.batch[this.index];
+        this.batch[this.index++] = undefined as T;
+        return value;
+    }
+
+    // Called by for-await on break, return or a throw in the loop body:
+    // cancel so the cancellation reaches the source, e.g. aborting a fetch download
+    async return(): Promise<IteratorResult<T, undefined>> {
+        this.batch = [];
+        this.index = 0;
+        await this.core.cancel();
+        return { value: undefined, done: true };
+    }
+}
+
+class JsonAsyncIterable<T> implements AsyncIterable<T> {
+    private core: BatchReader<T>;
+
+    constructor(stream: ReadableStream<Uint8Array>, config?: JsonParserConfig) {
+        this.core = new BatchReader<T>(stream, config);
     }
 
     // Returns an async iterator that yields parsed JSON objects from the stream.
-    async *[Symbol.asyncIterator](): AsyncIterator<T> {
-        const reader = this.stream.getReader();
-        let finished = false;
-
-        try {
-            let result: ReadableStreamReadResult<T>;
-            while (!(result = await reader.read()).done) {
-                yield result.value;
-            }
-            finished = true;
-        } finally {
-            // The consumer stopped early (break, return or throw) or the stream failed:
-            // cancel so the cancellation reaches the source, e.g. aborting a fetch download.
-            // Cancelling an already errored stream rejects with its error, which was already thrown.
-            if (!finished)
-                await reader.cancel().catch(() => { });
-            reader.releaseLock();
-        }
+    [Symbol.asyncIterator](): AsyncIterator<T, undefined> {
+        return new JsonAsyncIterator(this.core);
     }
 }
 
 export function toJsonAsyncIterable<T>(source: ReadableStream<Uint8Array> | Response, config?: JsonParserConfig): AsyncIterable<T> {
-    const stream = source instanceof Response ? source.body : source;
-
-    if (!stream) {
-        throw new Error('No readable stream found.');
-    }
-
-    return new StreamToAsyncIterable(stream, config);
+    return new JsonAsyncIterable<T>(sourceStream(source), config);
 };
