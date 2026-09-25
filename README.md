@@ -39,25 +39,11 @@ for await (const feature of features) {
 
 ## Performance
 
-`jsooner` has been benchmarked against other JavaScript parsers that support streaming, as well as the native `JSON.parse` method, to demonstrate its efficiency with large JSON files.
+`jsooner` has been benchmarked against other JavaScript JSON parsers that can stream items, as well as the native `JSON.parse` method. The input is a generated 136 MB GeoJSON file with 360,000 features, read in 64 KB chunks, with each parser in its own process.
 
-The benchmarks were conducted on a [136 MB GeoJSON file](https://data-nces.opendata.arcgis.com/api/download/v1/items/6a4fa1b0434e4688b5d60c2e5c1dcaaa/geojson?layers=0) stored locally.
+![Parsing time vs peak memory](assets/benchmark.svg)
 
-```mermaid
-xychart-beta horizontal
-    title "Parsing Time"
-    x-axis [JSON.parse, jsooner, "streamparser/json", oboe, stream-json]
-    y-axis "Time, s" 0 --> 30
-    bar [1.78, 2.86, 6.94, 8.43, 25.4]
-```
-
-```mermaid
-xychart-beta horizontal
-    title "Parsing Memory"
-    x-axis ["streamparser/json", jsooner, stream-json, oboe, JSON.parse]
-    y-axis "Resident Set, Mb" 0 --> 750
-    bar [59, 62, 85, 625, 743]
-```
+Lower left is better. `JSON.parse` and json-ext's `parseChunked` are faster, but they build the whole document in memory. Of the parsers that stream items one at a time, `jsooner` is the fastest and uses the least memory.
 
 ## License
 
