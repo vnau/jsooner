@@ -10,10 +10,12 @@ export interface JsonParserStat {
     items: number;
 }
 
+const NEWLINE = 0x0a;       // \n
 const QUOTE = 0x22;         // "
 const BACKSLASH = 0x5c;     // \
 const OPEN_BRACE = 0x7b;    // {
 const CLOSE_BRACE = 0x7d;   // }
+const OPEN_BRACKET = 0x5b;  // [
 const CLOSE_BRACKET = 0x5d; // ]
 
 // Characters String.prototype.trim() would skip before a closing bracket
@@ -41,6 +43,7 @@ export class JsonDecoder<T> implements Transformer<string, T> {
     private inString = false;
     private escaped = false;
     private atItemBoundary = true;  // no non-whitespace seen since the last item (or the prefix)
+    private beforeValue = false;    // right after the prefix, before the value it names has started
     private parts: string[] = [];   // text of an unfinished item from earlier chunks
     private partsLength = 0;
 
@@ -72,6 +75,7 @@ export class JsonDecoder<T> implements Transformer<string, T> {
                 return;
             }
             this.prefixSkipped = true;
+            this.beforeValue = true;
             this.lookupTail = "";
             text = window.slice(prefixIndex + this.prefixLength);
         }
@@ -90,6 +94,7 @@ export class JsonDecoder<T> implements Transformer<string, T> {
         let inString = this.inString;
         let escaped = this.escaped;
         let atItemBoundary = this.atItemBoundary;
+        let beforeValue = this.beforeValue;
         let start = depth > 0 ? 0 : -1;
         const length = text.length;
         let i = 0;
@@ -102,8 +107,42 @@ export class JsonDecoder<T> implements Transformer<string, T> {
 
         while (i < length) {
             if (depth === 0) {
+                // Right after the lookup string (e.g. `": [` after `"features`), skip to the start of its value.
+                // A "[" opens the target array, so a "]" right after it ends the stream even when the array is
+                // empty; a "{" is its first item; a "]" before either ends the stream (a lookup ending in "[").
+                if (beforeValue) {
+                    while (i < length) {
+                        const c = text.charCodeAt(i);
+                        if (c === OPEN_BRACKET || c === OPEN_BRACE || c === CLOSE_BRACKET) {
+                            beforeValue = false;
+                            atItemBoundary = true;
+                            if (c === OPEN_BRACKET)
+                                i++;
+                            break;
+                        }
+                        i++;
+                    }
+                    continue;
+                }
+
+                // A string between items, e.g. the primitive "a{b" in ["a{b",{...}]: skip it so its braces don't
+                // start an item. Rare, so a plain loop. A JSON string can't contain a raw newline, so a newline
+                // ends it too: the quote was then part of non-JSON text, such as an SSE field (`event: "x`).
+                if (inString) {
+                    while (i < length) {
+                        const c = text.charCodeAt(i++);
+                        if (escaped) escaped = false;
+                        else if (c === BACKSLASH) escaped = true;
+                        else if (c === QUOTE || c === NEWLINE) {
+                            inString = false;
+                            break;
+                        }
+                    }
+                    continue;
+                }
+
                 // Between items: a "]" as the first non-whitespace after an item ends the stream,
-                // and anything else up to the next "{" is skipped
+                // and anything else up to the next "{" is skipped, except strings (see above)
                 if (atItemBoundary) {
                     let c = text.charCodeAt(i);
                     while (isWhitespace(c) && ++i < length)
@@ -119,6 +158,22 @@ export class JsonDecoder<T> implements Transformer<string, T> {
                     atItemBoundary = false;
                 }
                 const open = text.indexOf("{", i);
+                // Look for a string start only in the gap before the next "{": usually just `,` and whitespace,
+                // so a short loop beats indexOf, which could search far past the "{"
+                const gapEnd = open === -1 ? length : open;
+                let quote = -1;
+                if (gapEnd - i > 32) {
+                    quote = text.indexOf('"', i);
+                    if (quote >= gapEnd) quote = -1;
+                } else {
+                    for (let k = i; k < gapEnd; k++)
+                        if (text.charCodeAt(k) === QUOTE) { quote = k; break; }
+                }
+                if (quote !== -1) {
+                    inString = true;
+                    i = quote + 1;
+                    continue;
+                }
                 if (open === -1)
                     break;
                 depth = 1;
@@ -191,6 +246,7 @@ export class JsonDecoder<T> implements Transformer<string, T> {
         this.inString = inString;
         this.escaped = escaped;
         this.atItemBoundary = atItemBoundary;
+        this.beforeValue = beforeValue;
     }
 }
 
