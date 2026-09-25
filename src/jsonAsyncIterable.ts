@@ -13,13 +13,20 @@ class StreamToAsyncIterable<T> {
     // Returns an async iterator that yields parsed JSON objects from the stream.
     async *[Symbol.asyncIterator](): AsyncIterator<T> {
         const reader = this.stream.getReader();
+        let finished = false;
 
         try {
             let result: ReadableStreamReadResult<T>;
             while (!(result = await reader.read()).done) {
                 yield result.value;
             }
+            finished = true;
         } finally {
+            // The consumer stopped early (break, return or throw) or the stream failed:
+            // cancel so the cancellation reaches the source, e.g. aborting a fetch download.
+            // Cancelling an already errored stream rejects with its error, which was already thrown.
+            if (!finished)
+                await reader.cancel().catch(() => { });
             reader.releaseLock();
         }
     }

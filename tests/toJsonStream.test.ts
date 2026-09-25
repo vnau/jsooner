@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toJsonStream } from '../src';
-import { createMockResponse, stringToStream } from './utils';
+import { createMockResponse, stringToStream, waitFor } from './utils';
 
 describe('toJsonStream', () => {
   it('should handle ReadableStream<Uint8Array> input and parse JSON objects', async () => {
@@ -43,6 +43,20 @@ describe('toJsonStream', () => {
     await expect(() => toJsonStream(null as unknown as Response)).toThrowError('No readable stream found.');
   });
 
+  it('should throw an error for a Response without a body', () => {
+    expect(() => toJsonStream(new Response(null))).toThrowError('No readable stream found.');
+  });
+
+  it('should pass the lookup config to the parser', async () => {
+    const stream = toJsonStream(stringToStream('{"meta":"x","items":[{"a":1}]}', 4), { lookup: '"items"' });
+    const reader = stream.getReader();
+    const result: unknown[] = [];
+    let chunk: ReadableStreamReadResult<unknown>;
+    while (!(chunk = await reader.read()).done) result.push(chunk.value);
+
+    expect(result).toEqual([{ a: 1 }]);
+  });
+
   it('should parse multiple JSON objects from the stream', async () => {
     const jsonString = '[{"key1": "value1"},{"key2": "value2"}] ';
     const stream = stringToStream(jsonString);
@@ -80,6 +94,20 @@ describe('toJsonStream', () => {
     }
 
     expect(result).toEqual([{ key1: 'value1' }]);
+  });
+
+  it('should pass cancel() through to the source', async () => {
+    let reason: unknown;
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) { controller.enqueue(new TextEncoder().encode('{"a":1},')); },
+      cancel(r) { reason = r; },
+    });
+    const reader = toJsonStream(source).getReader();
+    await reader.read();
+    await reader.cancel('stop');
+
+    await waitFor(() => reason !== undefined);
+    expect(reason).toBe('stop');
   });
 
 });

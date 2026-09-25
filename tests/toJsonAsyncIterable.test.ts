@@ -1,7 +1,7 @@
 import { toJsonAsyncIterable } from '../src';
 import { describe, expect, it } from 'vitest';
 import { Readable } from 'stream';
-import { stringToStream } from './utils';
+import { collect, stringToStream, waitFor } from './utils';
 import * as fs from 'fs';
 
 describe('toJsonAsyncIterable', () => {
@@ -54,6 +54,83 @@ describe('toJsonAsyncIterable', () => {
     it('should throw an error if no readable stream is found', async () => {
         // Testing invalid input (null)
         await expect(() => toJsonAsyncIterable(null as any)).toThrowError('No readable stream found.');
+    });
+
+    it('should throw an error for a Response without a body', () => {
+        expect(() => toJsonAsyncIterable(new Response(null))).toThrowError('No readable stream found.');
+    });
+
+    it('should release the reader lock when the loop exits early', async () => {
+        const iterable = toJsonAsyncIterable(stringToStream('[{"a":1},{"b":2},{"c":3}]'));
+        for await (const _ of iterable) break;
+        expect((iterable as any).stream.locked).toBe(false);
+    });
+
+    it('should release the reader lock when the stream errors', async () => {
+        const iterable = toJsonAsyncIterable(stringToStream('[{"a":1,}]'));
+        await expect(collect(iterable)).rejects.toThrow('JSON parse error');
+        expect((iterable as any).stream.locked).toBe(false);
+    });
+
+    describe('cancelling the source', () => {
+
+        // An endless source that records how often it was pulled and whether it was cancelled
+        function endlessSource() {
+            const state = { pulled: 0, cancelled: false, reason: undefined as unknown };
+            const stream = new ReadableStream<Uint8Array>({
+                pull(controller) { controller.enqueue(new TextEncoder().encode(`{"i":${++state.pulled}},`)); },
+                cancel(reason) { state.cancelled = true; state.reason = reason; },
+            });
+            return { stream, state };
+        }
+
+        it('should cancel the source when the loop exits early with break', async () => {
+            const { stream, state } = endlessSource();
+            for await (const item of toJsonAsyncIterable<{ i: number }>(stream)) {
+                if (item.i >= 3) break;
+            }
+            await waitFor(() => state.cancelled);
+            const pulledAfterCancel = state.pulled;
+            await new Promise(resolve => setTimeout(resolve, 10));
+            expect(state.pulled).toBe(pulledAfterCancel);
+        });
+
+        it('should cancel the source when the loop body throws', async () => {
+            const { stream, state } = endlessSource();
+            await expect(async () => {
+                for await (const item of toJsonAsyncIterable<{ i: number }>(stream)) {
+                    if (item.i >= 2) throw new Error('consumer failed');
+                }
+            }).rejects.toThrow('consumer failed');
+            await waitFor(() => state.cancelled);
+        });
+
+        it('should cancel the body of a Response, as when reading from fetch', async () => {
+            const { stream, state } = endlessSource();
+            for await (const _ of toJsonAsyncIterable(new Response(stream))) break;
+            await waitFor(() => state.cancelled);
+        });
+
+        it('should cancel the source when an item is invalid', async () => {
+            let cancelled = false;
+            const source = new ReadableStream<Uint8Array>({
+                pull(controller) { controller.enqueue(new TextEncoder().encode('{"a":1,}')); },
+                cancel() { cancelled = true; },
+            });
+            await expect(collect(toJsonAsyncIterable(source))).rejects.toThrow('JSON parse error');
+            await waitFor(() => cancelled);
+        });
+
+        it('should not cancel the source when the stream is read to the end', async () => {
+            let cancelled = false;
+            const source = new ReadableStream<Uint8Array>({
+                start(controller) { controller.enqueue(new TextEncoder().encode('{"a":1}{"b":2}')); controller.close(); },
+                cancel() { cancelled = true; },
+            });
+            expect(await collect(toJsonAsyncIterable(source))).toEqual([{ a: 1 }, { b: 2 }]);
+            await new Promise(resolve => setTimeout(resolve, 10));
+            expect(cancelled).toBe(false);
+        });
     });
 
     it('should handle JSON strings with escape characters', async () => {
