@@ -8,6 +8,7 @@
   "sideEffects": false,
   "packageManager": "pnpm@10.28.2",
   "scripts": {
+    "bench": "pnpm build && node bench/generate.mjs && node bench/run.mjs && node bench/large-item.mjs",
     "build": "tsc",
     "coverage": "vitest --coverage.enabled",
     "start": "pnpm build && node dist/index.js",
@@ -32,8 +33,14 @@
   "author": "vnau",
   "license": "MIT",
   "devDependencies": {
+    "@discoveryjs/json-ext": "^1.1.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@streamparser/json-whatwg": "^0.0.26",
     "@types/node": "^25.3.5",
     "@vitest/coverage-v8": "^4.0.18",
+    "bfj": "^9.1.3",
+    "stream-chain": "^4.2.5",
+    "stream-json": "^3.7.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.18"
