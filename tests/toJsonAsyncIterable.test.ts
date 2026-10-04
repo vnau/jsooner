@@ -107,6 +107,55 @@ describe('toJsonAsyncIterable', () => {
         expect(await collect(toJsonAsyncIterable(source))).toEqual([{ a: 'x' }]);
     });
 
+    describe('large source chunks', () => {
+
+        const SLICE = 64 * 1024;
+        const oneChunk = (bytes: Uint8Array | ArrayBuffer | DataView) =>
+            new ReadableStream<Uint8Array>({ start(c) { c.enqueue(bytes as Uint8Array); c.close(); } });
+
+        it('should parse a chunk spanning many slices and decode it in 64 KB pieces', async () => {
+            const items = Array.from({ length: 5000 }, (_, i) => ({ i, s: `é🌍日本 {"${i}"} ${'x'.repeat(i % 50)}` }));
+            const bytes = new TextEncoder().encode(JSON.stringify(items));
+            expect(bytes.length).toBeGreaterThan(5 * SLICE);
+
+            const iterable = toJsonAsyncIterable(oneChunk(bytes));
+            expect(await collect(iterable)).toEqual(items);
+            // the decoder never saw more than one slice of text at a time
+            expect((iterable as any).core.getStat().maxChunkSize).toBeLessThanOrEqual(SLICE);
+        });
+
+        it.each([2, 3, 4])('should decode a %i-byte character cut at a slice boundary', async (width) => {
+            const char = { 2: 'é', 3: '日', 4: '🌍' }[width]!;
+            const prefix = '[{"s":"';
+            // place the character so that every one of its byte offsets falls on the boundary once
+            for (let cut = 1; cut < width; cut++) {
+                const text = `${prefix}${'a'.repeat(SLICE - prefix.length - cut)}${char}"},{"t":"${char}"}]`;
+                expect(await collect(toJsonAsyncIterable(oneChunk(new TextEncoder().encode(text))))).toEqual(JSON.parse(text));
+            }
+        });
+
+        it('should stop at "]" in the middle of a large chunk and cancel the source', async () => {
+            let cancelled = false;
+            const text = `[${JSON.stringify({ s: 'x'.repeat(SLICE) })},{"b":2}]` + `{"after":1}`.repeat(20000);
+            // left open after the chunk, like a download still in progress: a closed stream is not cancelled
+            const source = new ReadableStream<Uint8Array>({
+                start(c) { c.enqueue(new TextEncoder().encode(text)); },
+                cancel() { cancelled = true; },
+            });
+            const iterable = toJsonAsyncIterable(source);
+            expect(await collect(iterable)).toEqual([{ s: 'x'.repeat(SLICE) }, { b: 2 }]);
+            expect(cancelled).toBe(true);
+            // the slices after the "]" were never decoded
+            expect((iterable as any).core.getStat().length).toBeLessThan(text.length / 2);
+        });
+
+        it('should accept ArrayBuffer and DataView chunks', async () => {
+            const bytes = new TextEncoder().encode('{"a":1}{"b":2}');
+            expect(await collect(toJsonAsyncIterable(oneChunk(bytes.buffer)))).toEqual([{ a: 1 }, { b: 2 }]);
+            expect(await collect(toJsonAsyncIterable(oneChunk(new DataView(bytes.buffer, 7))))).toEqual([{ b: 2 }]);
+        });
+    });
+
     describe('cancelling the source', () => {
 
         // An endless source that records how often it was pulled and whether it was cancelled
