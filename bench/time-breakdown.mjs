@@ -74,7 +74,7 @@ console.log("| Stage | Time, s |");
 console.log("|---|---:|");
 await time(`\`JSON.parse\` of the ${items.length.toLocaleString("en-US")} items, one call each`, () => { for (const item of items) JSON.parse(item); });
 await time(`\`JSON.parse\` of the same items in batches of ${perChunk} (${batches.length.toLocaleString("en-US")} calls, as json-ext does per 64 KB chunk)`, () => { for (const batch of batches) JSON.parse(batch); });
-await time("jsooner 1.1.0 brace-counting scan over the items (`input[i]`)", () => {
+await time("jsooner 1.5.0 brace-counting scan over the items (`input[i]`)", () => {
     for (const item of items) {
         let balance = 0, inString = false;
         for (let i = 0; i < item.length; i++) {

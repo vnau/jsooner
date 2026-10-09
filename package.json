@@ -1,6 +1,6 @@
 {
   "name": "jsooner",
-  "version": "1.1.0",
+  "version": "1.5.0",
   "description": "Parse long JSON streams faster.",
   "type": "module",
   "main": "dist/index.js",
