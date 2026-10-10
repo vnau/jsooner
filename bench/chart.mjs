@@ -47,7 +47,7 @@ function text(x, y, content, { size = 13, color = COLORS.textSecondary, anchor =
 
 /**
  * @param {{ name: string, seconds: number, rssMb: number }[]} results
- * @param {{ fileMb?: number, items?: number, node?: string, platform?: string, baselineRssMb?: number }} meta
+ * @param {{ fileMb?: number, dataset?: string, items?: number, node?: string, platform?: string, baselineRssMb?: number }} meta
  * @returns {string} SVG markup
  */
 export function chartSvg(results, meta = {}) {
@@ -55,7 +55,9 @@ export function chartSvg(results, meta = {}) {
     const times = ok.map(r => r.seconds);
     const memory = ok.map(r => r.rssMb).concat(meta.baselineRssMb ? [meta.baselineRssMb] : []);
     const xTicks = logTicks(Math.min(...times), Math.max(...times));
-    const yTicks = logTicks(Math.min(...memory), Math.max(...memory));
+    let yTicks = logTicks(Math.min(...memory), Math.max(...memory));
+    const baseline = meta.baselineRssMb;
+    if (baseline) yTicks = [baseline, ...yTicks.filter(t => t > baseline * 1.25)];
 
     const plotW = WIDTH - PLOT.left - PLOT.right;
     const plotH = HEIGHT - PLOT.top - PLOT.bottom;
@@ -73,7 +75,7 @@ export function chartSvg(results, meta = {}) {
     // Title and subtitle
     out.push(text(PLOT.left, 40, "Parsing time vs peak memory", { size: 20, color: COLORS.textPrimary, weight: 600 }));
     const subtitle = [
-        meta.fileMb && `${meta.fileMb} MB GeoJSON`,
+        meta.fileMb && `${meta.fileMb} MB ${meta.dataset ?? "GeoJSON"}`,
         meta.items && `${meta.items.toLocaleString("en-US")} features`,
         "64 KB chunks",
         meta.node && `Node ${meta.node}`,

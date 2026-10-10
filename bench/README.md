@@ -20,4 +20,4 @@ node bench/large-item.mjs        # one large object across many chunks: confirms
 
 ![Parsing time vs peak memory](../assets/benchmark.svg)
 
-Every parser reads the file in 64 KB chunks. Results depend on hardware and Node version, so compare ratios rather than absolute times.
+Every streaming parser reads the file in 64 KB chunks; `JSON.parse` and fast-json (which has no chunked input) read it whole. Results depend on hardware and Node version, so compare ratios rather than absolute times.

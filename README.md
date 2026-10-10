@@ -16,17 +16,17 @@ It is built for long sequences of objects: the items of a large array like GeoJS
 `JSON.parse` needs the whole document in memory, both the text and the resulting objects, and gives you nothing until the download has finished. `jsooner` instead:
 
 - **Hands out each object as soon as it has arrived,** so you can process the first items while the rest is still downloading.
-- **Keeps memory flat, whatever the input size.** On a 136 MB GeoJSON file it peaked at 61 MB, against 503 MB for `JSON.parse` (see [Performance](#performance)).
+- **Keeps memory flat, whatever the input size.** On a 136 MB GeoJSON file it peaked at 79 MB, against 420 MB for `JSON.parse` (see [Performance](#performance)).
 - **Stays close to `JSON.parse` in speed.** It only finds where each object starts and ends, then parses that object with the native `JSON.parse`.
 - **Reads streamed formats directly:** NDJSON, CLEF logs and server-sent events from LLM APIs, with no separate parser in front.
 
 ## Performance
 
-`jsooner` has been benchmarked against other JavaScript JSON parsers that can stream items, as well as the native `JSON.parse` method. The input is a generated 136 MB GeoJSON file with 360,000 features, read in 64 KB chunks, with each parser in its own process.
+`jsooner` has been benchmarked against other JavaScript JSON parsers that can stream items, as well as the native `JSON.parse` method. The input is a generated 136 MB GeoJSON file with 360,000 features, read in 64 KB chunks (fast-json and `JSON.parse` get the whole file at once), with each parser in its own process.
 
 ![Parsing time vs peak memory](assets/benchmark.svg)
 
-Lower left is better. `JSON.parse` is faster, but it holds the whole document in memory: 503 MB here. json-ext's `parseChunked` is about as fast as `jsooner` but also builds the whole document (400 MB). Of the parsers that stream items one at a time, `jsooner` is the fastest and uses the least memory. To reproduce, run `pnpm bench` (see [bench/README.md](bench/README.md)).
+Lower left is better. `JSON.parse` is faster, but it holds the whole document in memory: 420 MB here. json-ext's `parseChunked` is about as fast as `jsooner` but also builds the whole document (387 MB). fast-json picks out each feature without building the document, but it can't take chunked input, so the whole file has to be in memory (212 MB). Of the parsers that stream items one at a time, `jsooner` is the fastest and uses the least memory. To reproduce, run `pnpm bench` (see [bench/README.md](bench/README.md)).
 
 ## Installation
 
@@ -34,7 +34,7 @@ Lower left is better. `JSON.parse` is faster, but it holds the whole document in
 npm install jsooner
 ```
 
-`jsooner` uses only web-standard APIs (`ReadableStream`, `TextDecoder`), so it runs in modern browsers and in Node.js. It is tested on Node.js 24.
+`jsooner` uses only web-standard APIs (`ReadableStream`, `TextDecoder`), so it runs in modern browsers and in Node.js. It is tested on Node.js 24 and 26.
 
 ## Usage
 

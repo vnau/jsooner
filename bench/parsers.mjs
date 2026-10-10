@@ -14,6 +14,22 @@ export const parsers = {
         return n;
     },
 
+    "json-ext parseChunked": async file => {
+        const { parseChunked } = await import("@discoveryjs/json-ext");
+        return (await parseChunked(fs.createReadStream(file, { highWaterMark: CHUNK_SIZE }))).features.length;
+    },
+
+    "fast-json": async file => {
+        const { FastJson } = await import("fast-json");
+        let n = 0;
+        // fast-json 3.0.0 has no chunked input (a second write() never returns), so it gets the whole file.
+        // Matched objects arrive as raw JSON text; parse them so every adapter ends with the same objects
+        const fastJson = new FastJson();
+        fastJson.on("features[*]", value => { JSON.parse(value); n++; });
+        fastJson.write(fs.readFileSync(file));
+        return n;
+    },
+
     "@streamparser/json": async file => {
         const { JSONParser } = await import("@streamparser/json-whatwg");
         let n = 0;
@@ -45,11 +61,6 @@ export const parsers = {
             bfj.match(fs.createReadStream(file, { highWaterMark: CHUNK_SIZE }), isFeature, { minDepth: 2 })
                 .on("data", () => n++).on("end", resolve).on("error", reject).on("dataError", reject));
         return n;
-    },
-
-    "json-ext parseChunked": async file => {
-        const { parseChunked } = await import("@discoveryjs/json-ext");
-        return (await parseChunked(fs.createReadStream(file, { highWaterMark: CHUNK_SIZE }))).features.length;
     },
 };
 

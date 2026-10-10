@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "sideEffects": false,
-  "packageManager": "pnpm@10.28.2",
+  "packageManager": "pnpm@12.10.1",
   "scripts": {
     "bench": "pnpm build && node bench/generate.mjs && node bench/run.mjs && node bench/large-item.mjs",
     "build": "tsc",
@@ -39,6 +39,7 @@
     "@types/node": "^25.3.5",
     "@vitest/coverage-v8": "^4.0.18",
     "bfj": "^9.1.3",
+    "fast-json": "^3.0.0",
     "stream-chain": "^4.2.5",
     "stream-json": "^3.7.0",
     "typescript": "^5.9.3",
