@@ -7,6 +7,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for the Codecov upload
+
     strategy:
       fail-fast: true
       matrix:
@@ -30,28 +34,20 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Only run the coverage once
-      - if: ${{ matrix.node-version == '24.x' }}
-        name: Get Coverage for badge
-        run: |
-          SUMMARY="$(pnpm test-ci | tail -2 | head -1)"
-          TOKENS=($SUMMARY)
-          echo "COVERAGE=$(echo ${TOKENS[2]})" >> $GITHUB_ENV
+      # Coverage is measured once, on 24.x; the other versions just run the tests
+      - if: ${{ matrix.node-version != '24.x' }}
+        name: Test
+        run: pnpm vitest run
 
-          REF=${{ github.ref }}
-          echo "github.ref: $REF"
-          IFS='/' read -ra PATHS <<< "$REF"
-          BRANCH_NAME="${PATHS[1]}_${PATHS[2]}"
-          echo $BRANCH_NAME
-          echo "BRANCH=$(echo ${BRANCH_NAME})" >> $GITHUB_ENV
-#      - if: ${{ matrix.node-version == '24.x' }}
-#        name: Create the Badge
-#        uses: schneegans/dynamic-badges-action@v1.7.0
-#        with:
-#          auth: ${{ secrets.GIST_SECRET }}
-#          gistID: 7353726794cee33914eb47e39e6694c6
-#          filename: jsooner__${{ env.BRANCH }}.json
-#          label: Test Coverage
-#          message: ${{ env.COVERAGE }}
-#          color: green
-#          namedLogo: vitest
+      - if: ${{ matrix.node-version == '24.x' }}
+        name: Test with coverage
+        run: pnpm test-ci
+
+      # Signs in with GitHub OIDC, so no Codecov token is stored. Pull requests from forks get
+      # no OIDC token; the upload then fails without failing the job
+      - if: ${{ matrix.node-version == '24.x' }}
+        name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          files: ./coverage/lcov.info

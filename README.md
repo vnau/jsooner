@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/jsooner?color=brightgreen&logo=npm)](https://www.npmjs.com/package/jsooner)
 [![downloads](https://img.shields.io/npm/dm/jsooner)](https://www.npmjs.com/package/jsooner)
-![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/vnau/7353726794cee33914eb47e39e6694c6/raw/jsooner__heads_main.json)
+[![codecov](https://codecov.io/gh/vnau/jsooner/graph/badge.svg)](https://codecov.io/gh/vnau/jsooner)
 [![bundle size](https://deno.bundlejs.com/badge?q=jsooner)](https://bundlejs.com/?q=jsooner)
 ![dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 [![license](https://img.shields.io/npm/l/jsooner)](LICENSE)

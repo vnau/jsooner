@@ -12,7 +12,7 @@
     "build": "tsc",
     "coverage": "vitest --coverage.enabled",
     "start": "pnpm build && node dist/index.js",
-    "test-ci": "vitest run --coverage.enabled --coverage.reporter=\"text-summary\"",
+    "test-ci": "vitest run --coverage.enabled --coverage.reporter=text-summary --coverage.reporter=lcov",
     "test-coverage": "vitest run --coverage",
     "test-dev": "vitest",
     "test": "vitest"
