@@ -1,6 +1,6 @@
 # Benchmarks
 
-Compares jsooner with other JSON parsers. jsooner is loaded from `dist/`, so build first.
+Compares jsooner with other JSON parsers. jsooner is loaded from `dist/`, so build first. The comparison parsers are dependencies of this private workspace package ([package.json](package.json)), so a plain `pnpm install` at the repository root installs them; CI installs only the library. Run the scripts from the repository root.
 
 ```bash
 pnpm build

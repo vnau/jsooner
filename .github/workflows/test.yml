@@ -23,8 +23,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "pnpm"
 
+      # Only the library; the benchmark's comparison parsers live in the bench workspace package
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter jsooner
 
       - name: Build
         run: pnpm build

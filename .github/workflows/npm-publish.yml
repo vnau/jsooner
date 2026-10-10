@@ -6,11 +6,11 @@ on:
       - 'v*'
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
-  publish:
+  # Installs, builds, tests and packs with no publishing rights
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,14 +21,39 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
 
+      # Only the library; the benchmark's comparison parsers live in the bench workspace package
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter jsooner
 
       - run: pnpm run build
 
-      - run: pnpm test
+      - run: pnpm vitest run
+
+      - name: Pack
+        run: pnpm pack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: jsooner-*.tgz
+          if-no-files-found: error
+
+  # Publishes the tarball the check job built; runs no project or dependency code
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
 
       - name: Publish to npm
-        run: pnpm publish --no-git-checks
+        run: npm publish jsooner-*.tgz
